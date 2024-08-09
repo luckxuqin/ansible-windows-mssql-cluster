@@ -27,11 +27,11 @@
     - name: Add IP address of all hosts to all hosts
       lineinfile:
         dest: /etc/hosts
-        regexp: '.*{{ item }}$'
-        line: "{{ hostvars[item].ansible_host }} {{item}}"
+        regexp: '.* {{ item }}$'
+        line: "{{ hostvars[item].ip|default(ansible_default_ipv4.address|default(ansible_all_ipv4_addresses[0])) }} {{item}}"
         state: present
-      when: hostvars[item].ansible_host is defined
-      with_items: "{{ groups.all }}"
+      when: hostvars[item].ip|default(ansible_default_ipv4.address|default(ansible_all_ipv4_addresses[0]))
+      with_items: "{{ common_add_groups_to_hosts | map('extract',groups) | list}}"
 
     - name: Get disk facts from Windows hosts
       community.windows.win_disk_facts:
@@ -167,6 +167,16 @@
         direction: in
         protocol: tcp
         state: present
+        enabled: yes   
+    
+    - name: Firewall rule to allow SQL AG Endpoint on TCP port 5022
+      community.windows.win_firewall_rule:
+        name: AG-Endpoint
+        localport: 5022
+        action: allow
+        direction: in
+        protocol: tcp
+        state: present
         enabled: yes    
 
     - name: Reboot
@@ -194,7 +204,6 @@
     - name: Collect IP addresses from each host
       set_fact:
         ip_addresses: "{{ groups['sql'] | map('extract', hostvars, 'ansible_host') | list }}" 
-        
 
     - name: Create Windows Cluster
       run_once: true
