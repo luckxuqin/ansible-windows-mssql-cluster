@@ -7,6 +7,7 @@
     ansible_connection: ssh
     ansible_shell_type: powershell
     start_letter: 'E'
+    common_add_groups_to_hosts: [ 'all' ]
 
   tasks:
 
