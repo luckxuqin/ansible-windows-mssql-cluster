@@ -138,6 +138,16 @@
         name: sql-server-management-studio
         state: present   
 
+    - name: Change MSSQL Service account
+      ansible.windows.win_shell: | 
+        [System.Reflection.Assembly]::LoadWithPartialName('Microsoft.SqlServer.SqlWmiManagement') | out-null
+        $Server = hostname
+        $UserName='.\administrator'
+        $Password='P@ssw0rd'
+        $SMO = New-Object ('Microsoft.SqlServer.Management.Smo.Wmi.ManagedComputer') $Server
+        $Service = $SMO.Services | where {$_.type -like 'SQLServer'}
+        $Service.SetServiceAccount($UserName, $Password) 
+
     - name: Enable TCP and Named Pipes for SQL
       ansible.windows.win_shell: |
         Import-Module -Name SQLPS
