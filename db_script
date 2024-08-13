@@ -176,14 +176,15 @@ BEGIN
 	ALTER ENDPOINT [Hadr_endpoint] STATE = STARTED
 END
 
+GO
+
+USE [master]
 
 GO
 
-use [master]
-
-GO
-
-GRANT CONNECT ON ENDPOINT::[Hadr_endpoint] TO [NT Service\MSSQLSERVER]
+CREATE ENDPOINT [Hadr_endpoint] 
+	AS TCP (LISTENER_PORT = 5022)
+	FOR DATA_MIRRORING (ROLE = ALL, ENCRYPTION = REQUIRED ALGORITHM AES)
 
 GO
 
@@ -207,14 +208,6 @@ BEGIN
 	ALTER ENDPOINT [Hadr_endpoint] STATE = STARTED
 END
 
-
-GO
-
-use [master]
-
-GO
-
-GRANT CONNECT ON ENDPOINT::[Hadr_endpoint] TO [NT Service\MSSQLSERVER]
 
 GO
 
