@@ -154,151 +154,286 @@ GO
 -- Now that we have a DB which is backed-up, an AG can be created
 
 
---- write connect argument to secondary to file
-DECLARE @secondary varchar(128)
-set @secondary = (select member_name from master.sys.dm_hadr_cluster_members where member_name like 'sql-%' and member_name not like @@servername);
-:Out $(TEMP)\secondary.temp
-PRINT ':connect ' +  @secondary + '';
-GO
-:Out stdout
-
 --- write connect argument to primary to file
 :Out $(TEMP)\primary.temp
 PRINT ':connect ' +  @@SERVERNAME + '';
 GO
 :Out stdout
 
+--- write connect argument to first replica node
+DECLARE @sec1 varchar(120) = (SELECT TOP 1 member_name from master.sys.dm_hadr_cluster_members where member_name like 'sql-%' and member_name not like @@servername);
+:Out $(TEMP)\sec1.temp
+PRINT ':connect ' +  @sec1 + '';
+GO
+:Out stdout
 
+--- write connect argument to second replica node
+DECLARE @sec2 varchar(120) = (SELECT member_name from master.sys.dm_hadr_cluster_members where member_name like 'sql-%' and member_name not like @@servername order by member_name OFFSET 1 ROWS FETCH NEXT 1 ROWS ONLY);
+
+:Out $(TEMP)\sec2.temp
+PRINT ':connect ' +  @sec2 + '';
+GO
+:Out stdout
+
+--- write connect argument to third replica node
+DECLARE @sec3 varchar(120) = (SELECT member_name from master.sys.dm_hadr_cluster_members where member_name like 'sql-%' and member_name not like @@servername order by member_name OFFSET 2 ROWS FETCH NEXT 1 ROWS ONLY);
+
+:Out $(TEMP)\sec3.temp
+PRINT ':connect ' +  @sec3 + '';
+GO
+:Out stdout
+
+--- write connect argument to fourth replica node
+DECLARE @sec4 varchar(120) = (SELECT member_name from master.sys.dm_hadr_cluster_members where member_name like 'sql-%' and member_name not like @@servername order by member_name OFFSET 3 ROWS FETCH NEXT 1 ROWS ONLY);
+
+:Out $(TEMP)\sec4.temp
+PRINT ':connect ' +  @sec4 + '';
+GO
+:Out stdout
+
+--- create endpoint on primary
 :r $(TEMP)\primary.temp
 
-USE [master]
+EXEC
+	(N'USE [master]
+
+    CREATE ENDPOINT [Hadr_endpoint] 
+        AS TCP (LISTENER_PORT = 5022)
+        FOR DATA_MIRRORING (ROLE = ALL, ENCRYPTION = REQUIRED ALGORITHM AES)
+
+    IF (SELECT state FROM sys.endpoints WHERE name = N''Hadr_endpoint'') <> 0
+    BEGIN
+        ALTER ENDPOINT [Hadr_endpoint] STATE = STARTED
+    END
+
+    IF EXISTS(SELECT * FROM sys.server_event_sessions WHERE name=''AlwaysOn_health'')
+    BEGIN
+    ALTER EVENT SESSION [AlwaysOn_health] ON SERVER WITH (STARTUP_STATE=ON);
+    END
+    IF NOT EXISTS(SELECT * FROM sys.dm_xe_sessions WHERE name=''AlwaysOn_health'')
+    BEGIN
+    ALTER EVENT SESSION [AlwaysOn_health] ON SERVER STATE=START;
+    END')
 
 GO
 
-CREATE ENDPOINT [Hadr_endpoint] 
-	AS TCP (LISTENER_PORT = 5022)
-	FOR DATA_MIRRORING (ROLE = ALL, ENCRYPTION = REQUIRED ALGORITHM AES)
+--- create endpoint on first replica node
+:r $(TEMP)\sec1.temp
+
+EXEC
+	(N'USE [master]
+
+    CREATE ENDPOINT [Hadr_endpoint] 
+        AS TCP (LISTENER_PORT = 5022)
+        FOR DATA_MIRRORING (ROLE = ALL, ENCRYPTION = REQUIRED ALGORITHM AES)
+
+    IF (SELECT state FROM sys.endpoints WHERE name = N''Hadr_endpoint'') <> 0
+    BEGIN
+        ALTER ENDPOINT [Hadr_endpoint] STATE = STARTED
+    END
+
+    IF EXISTS(SELECT * FROM sys.server_event_sessions WHERE name=''AlwaysOn_health'')
+    BEGIN
+    ALTER EVENT SESSION [AlwaysOn_health] ON SERVER WITH (STARTUP_STATE=ON);
+    END
+    IF NOT EXISTS(SELECT * FROM sys.dm_xe_sessions WHERE name=''AlwaysOn_health'')
+    BEGIN
+    ALTER EVENT SESSION [AlwaysOn_health] ON SERVER STATE=START;
+    END')
 
 GO
 
-IF (SELECT state FROM sys.endpoints WHERE name = N'Hadr_endpoint') <> 0
-BEGIN
-	ALTER ENDPOINT [Hadr_endpoint] STATE = STARTED
-END
+--- create endpoint on second replica node if exist
+DECLARE @sec2 varchar(120) = (SELECT member_name from master.sys.dm_hadr_cluster_members where member_name like 'sql-%' and member_name not like @@servername order by member_name OFFSET 1 ROWS FETCH NEXT 1 ROWS ONLY);
+
+:r $(TEMP)\sec2.temp
+
+IF @sec2 IS NOT NULL EXEC 
+	(N'USE [master]
+
+    CREATE ENDPOINT [Hadr_endpoint] 
+        AS TCP (LISTENER_PORT = 5022)
+        FOR DATA_MIRRORING (ROLE = ALL, ENCRYPTION = REQUIRED ALGORITHM AES)
+
+    IF (SELECT state FROM sys.endpoints WHERE name = N''Hadr_endpoint'') <> 0
+    BEGIN
+        ALTER ENDPOINT [Hadr_endpoint] STATE = STARTED
+    END
+
+    IF EXISTS(SELECT * FROM sys.server_event_sessions WHERE name=''AlwaysOn_health'')
+    BEGIN
+    ALTER EVENT SESSION [AlwaysOn_health] ON SERVER WITH (STARTUP_STATE=ON);
+    END
+    IF NOT EXISTS(SELECT * FROM sys.dm_xe_sessions WHERE name=''AlwaysOn_health'')
+    BEGIN
+    ALTER EVENT SESSION [AlwaysOn_health] ON SERVER STATE=START;
+    END')
 
 GO
 
-:r $(TEMP)\primary.temp
+--- create endpoint on third replica node if exist
+DECLARE @sec3 varchar(120) = (SELECT member_name from master.sys.dm_hadr_cluster_members where member_name like 'sql-%' and member_name not like @@servername order by member_name OFFSET 2 ROWS FETCH NEXT 1 ROWS ONLY);
 
-IF EXISTS(SELECT * FROM sys.server_event_sessions WHERE name='AlwaysOn_health')
-BEGIN
-  ALTER EVENT SESSION [AlwaysOn_health] ON SERVER WITH (STARTUP_STATE=ON);
-END
-IF NOT EXISTS(SELECT * FROM sys.dm_xe_sessions WHERE name='AlwaysOn_health')
-BEGIN
-  ALTER EVENT SESSION [AlwaysOn_health] ON SERVER STATE=START;
-END
+:r $(TEMP)\sec3.temp
 
-GO
+IF @sec3 IS NOT NULL EXEC 
+	(N'USE [master]
 
-:r $(TEMP)\secondary.temp 
+    CREATE ENDPOINT [Hadr_endpoint] 
+        AS TCP (LISTENER_PORT = 5022)
+        FOR DATA_MIRRORING (ROLE = ALL, ENCRYPTION = REQUIRED ALGORITHM AES)
 
-USE [master]
+    IF (SELECT state FROM sys.endpoints WHERE name = N''Hadr_endpoint'') <> 0
+    BEGIN
+        ALTER ENDPOINT [Hadr_endpoint] STATE = STARTED
+    END
 
-GO
-
-CREATE ENDPOINT [Hadr_endpoint] 
-	AS TCP (LISTENER_PORT = 5022)
-	FOR DATA_MIRRORING (ROLE = ALL, ENCRYPTION = REQUIRED ALGORITHM AES)
-
-GO
-
-IF (SELECT state FROM sys.endpoints WHERE name = N'Hadr_endpoint') <> 0
-BEGIN
-	ALTER ENDPOINT [Hadr_endpoint] STATE = STARTED
-END
-
+    IF EXISTS(SELECT * FROM sys.server_event_sessions WHERE name=''AlwaysOn_health'')
+    BEGIN
+    ALTER EVENT SESSION [AlwaysOn_health] ON SERVER WITH (STARTUP_STATE=ON);
+    END
+    IF NOT EXISTS(SELECT * FROM sys.dm_xe_sessions WHERE name=''AlwaysOn_health'')
+    BEGIN
+    ALTER EVENT SESSION [AlwaysOn_health] ON SERVER STATE=START;
+    END')
 
 GO
 
-:r $(TEMP)\secondary.temp 
+--- create endpoint on fourth replica node if exist
+DECLARE @sec4 varchar(120) = (SELECT member_name from master.sys.dm_hadr_cluster_members where member_name like 'sql-%' and member_name not like @@servername order by member_name OFFSET 3 ROWS FETCH NEXT 1 ROWS ONLY);
 
-IF EXISTS(SELECT * FROM sys.server_event_sessions WHERE name='AlwaysOn_health')
-BEGIN
-  ALTER EVENT SESSION [AlwaysOn_health] ON SERVER WITH (STARTUP_STATE=ON);
-END
-IF NOT EXISTS(SELECT * FROM sys.dm_xe_sessions WHERE name='AlwaysOn_health')
-BEGIN
-  ALTER EVENT SESSION [AlwaysOn_health] ON SERVER STATE=START;
-END
+:r $(TEMP)\sec4.temp
+
+IF @sec4 IS NOT NULL EXEC 
+	(N'USE [master]
+
+    CREATE ENDPOINT [Hadr_endpoint] 
+        AS TCP (LISTENER_PORT = 5022)
+        FOR DATA_MIRRORING (ROLE = ALL, ENCRYPTION = REQUIRED ALGORITHM AES)
+
+    IF (SELECT state FROM sys.endpoints WHERE name = N''Hadr_endpoint'') <> 0
+    BEGIN
+        ALTER ENDPOINT [Hadr_endpoint] STATE = STARTED
+    END
+
+    IF EXISTS(SELECT * FROM sys.server_event_sessions WHERE name=''AlwaysOn_health'')
+    BEGIN
+    ALTER EVENT SESSION [AlwaysOn_health] ON SERVER WITH (STARTUP_STATE=ON);
+    END
+    IF NOT EXISTS(SELECT * FROM sys.dm_xe_sessions WHERE name=''AlwaysOn_health'')
+    BEGIN
+    ALTER EVENT SESSION [AlwaysOn_health] ON SERVER STATE=START;
+    END')
 
 GO
 
-:r $(TEMP)\primary.temp
-
-USE [master]
-
-GO
-
---- now create the AG 'MyAG'
-
--- Define your T-SQL variables
-DECLARE @PrimaryServer NVARCHAR(128) = @@SERVERNAME;
-DECLARE @SecondaryServer NVARCHAR(128) = (select member_name from master.sys.dm_hadr_cluster_members where member_name like 'sql-%' and member_name not like @@servername);
+-- Define nodes
+DECLARE @sec1 NVARCHAR(128) = (SELECT TOP 1 member_name from master.sys.dm_hadr_cluster_members where member_name like 'sql-%' and member_name not like @@servername);
+DECLARE	@sec2 NVARCHAR(128) = (SELECT member_name from master.sys.dm_hadr_cluster_members where member_name like 'sql-%' and member_name not like @@servername order by member_name OFFSET 1 ROWS FETCH NEXT 1 ROWS ONLY);
+DECLARE @sec3 NVARCHAR(128) = (SELECT member_name from master.sys.dm_hadr_cluster_members where member_name like 'sql-%' and member_name not like @@servername order by member_name OFFSET 2 ROWS FETCH NEXT 1 ROWS ONLY);
+DECLARE @sec4 NVARCHAR(128) = (SELECT member_name from master.sys.dm_hadr_cluster_members where member_name like 'sql-%' and member_name not like @@servername order by member_name OFFSET 3 ROWS FETCH NEXT 1 ROWS ONLY);
 DECLARE @AvailabilityGroupName NVARCHAR(128) = 'MyAG';
-DECLARE @DatabaseName NVARCHAR(128) = 'MyDB';
+DECLARE @DatabaseName NVARCHAR(128) = 'MyDB'; 
 
-print @primaryServer
-print @secondaryServer
+DECLARE @tsql2 nvarchar(max) 
 
--- Construct the dynamic SQL command
-DECLARE @sql NVARCHAR(MAX);
+SET @tsql2 = 
+    N'
+    CREATE AVAILABILITY GROUP ' + QUOTENAME(@AvailabilityGroupName) + N'
+    WITH (AUTOMATED_BACKUP_PREFERENCE = SECONDARY,
+    DB_FAILOVER = OFF,
+    DTC_SUPPORT = NONE,
+    REQUIRED_SYNCHRONIZED_SECONDARIES_TO_COMMIT = 0)
+    FOR DATABASE ' + QUOTENAME(@DatabaseName) + N'
+    REPLICA ON
+        N''' + @@SERVERNAME + N''' WITH (
+            ENDPOINT_URL = N''TCP://' + @@SERVERNAME + N':5022'',
+            FAILOVER_MODE = AUTOMATIC,
+            AVAILABILITY_MODE = SYNCHRONOUS_COMMIT,
+            BACKUP_PRIORITY = 50, 
+            SEEDING_MODE = AUTOMATIC, 
+            SECONDARY_ROLE (ALLOW_CONNECTIONS = NO)),
+        N''' + @sec1 + N''' WITH (
+            ENDPOINT_URL = N''TCP://' + @sec1 + N':5022'',
+            FAILOVER_MODE = AUTOMATIC,
+            AVAILABILITY_MODE = SYNCHRONOUS_COMMIT,
+            BACKUP_PRIORITY = 50, 
+            SEEDING_MODE = AUTOMATIC, 
+            SECONDARY_ROLE (ALLOW_CONNECTIONS = NO))
+    '
 
-SET @sql = N'
-CREATE AVAILABILITY GROUP ' + QUOTENAME(@AvailabilityGroupName) + N'
-WITH (AUTOMATED_BACKUP_PREFERENCE = SECONDARY,
-DB_FAILOVER = OFF,
-DTC_SUPPORT = NONE,
-REQUIRED_SYNCHRONIZED_SECONDARIES_TO_COMMIT = 0)
-FOR DATABASE ' + QUOTENAME(@DatabaseName) + N'
-REPLICA ON
-    N''' + @PrimaryServer + N''' WITH (
-        ENDPOINT_URL = N''TCP://' + @PrimaryServer + N':5022'',
-        FAILOVER_MODE = AUTOMATIC,
-        AVAILABILITY_MODE = SYNCHRONOUS_COMMIT,
-        BACKUP_PRIORITY = 50, 
-        SEEDING_MODE = AUTOMATIC, 
-        SECONDARY_ROLE (ALLOW_CONNECTIONS = NO)),
-    N''' + @SecondaryServer + N''' WITH (
-        ENDPOINT_URL = N''TCP://' + @SecondaryServer + N':5022'',
-        FAILOVER_MODE = AUTOMATIC,
-        AVAILABILITY_MODE = SYNCHRONOUS_COMMIT,
-        BACKUP_PRIORITY = 50, 
-        SEEDING_MODE = AUTOMATIC, 
-        SECONDARY_ROLE (ALLOW_CONNECTIONS = NO));';
+IF @sec2 is not null SET @tsql2 = @tsql2 + 
+		N', N''' + @sec2 + N''' WITH (
+			ENDPOINT_URL = N''TCP://' + @sec2 + N':5022'',
+			FAILOVER_MODE = AUTOMATIC,
+			AVAILABILITY_MODE = SYNCHRONOUS_COMMIT,
+			BACKUP_PRIORITY = 50, 
+			SEEDING_MODE = AUTOMATIC, 
+			SECONDARY_ROLE (ALLOW_CONNECTIONS = NO))
+	'
 
--- Print the constructed SQL for debugging purposes
-PRINT @sql;
+IF @sec3 is not null SET @tsql2 = @tsql2 + 
+		N', N''' + @sec3 + N''' WITH (
+			ENDPOINT_URL = N''TCP://' + @sec3 + N':5022'',
+			FAILOVER_MODE = AUTOMATIC,
+			AVAILABILITY_MODE = ASYNCHRONOUS_COMMIT,
+			BACKUP_PRIORITY = 50, 
+			SEEDING_MODE = AUTOMATIC, 
+			SECONDARY_ROLE (ALLOW_CONNECTIONS = NO))
+	'
 
+IF @sec4 is not null SET @tsql2 = @tsql2 + 
+		N', N''' + @sec4 + N''' WITH (
+			ENDPOINT_URL = N''TCP://' + @sec4 + N':5022'',
+			FAILOVER_MODE = AUTOMATIC,
+			AVAILABILITY_MODE = ASYNCHRONOUS_COMMIT,
+			BACKUP_PRIORITY = 50, 
+			SEEDING_MODE = AUTOMATIC, 
+			SECONDARY_ROLE (ALLOW_CONNECTIONS = NO))'
+
+SET @tsql2 = @tsql2 + ';'
+
+-- now create the AG on primary
+:r $(TEMP)\primary.temp
+PRINT @tsql2;
 
 -- Execute the dynamic SQL command
-EXEC sp_executesql @sql;
-
-
---- Finally, connect to the secondary to join to the AG
-
+EXEC sp_executesql @tsql2;
 
 GO
 
-:r $(TEMP)\secondary.temp 
+-- Join AG on first replica node
+DECLARE @sec1 NVARCHAR(128) = (SELECT TOP 1 member_name from master.sys.dm_hadr_cluster_members where member_name like 'sql-%' and member_name not like @@servername);
 
-ALTER AVAILABILITY GROUP [MyAG] JOIN;
+:r $(TEMP)\sec1.temp
+
+EXEC (N'ALTER AVAILABILITY GROUP [MyAG] JOIN; ALTER AVAILABILITY GROUP [MyAG] GRANT CREATE ANY DATABASE;')
 
 GO
 
-ALTER AVAILABILITY GROUP [MyAG] GRANT CREATE ANY DATABASE;
+-- Join AG on second replica node
+DECLARE	@sec2 NVARCHAR(128) = (SELECT member_name from master.sys.dm_hadr_cluster_members where member_name like 'sql-%' and member_name not like @@servername order by member_name OFFSET 1 ROWS FETCH NEXT 1 ROWS ONLY);
+
+:r $(TEMP)\sec2.temp
+
+IF @sec2 IS NOT NULL EXEC (N'ALTER AVAILABILITY GROUP [MyAG] JOIN; ALTER AVAILABILITY GROUP [MyAG] GRANT CREATE ANY DATABASE;')
 
 GO
 
+-- Join AG on third replica node
+DECLARE @sec3 NVARCHAR(128) = (SELECT member_name from master.sys.dm_hadr_cluster_members where member_name like 'sql-%' and member_name not like @@servername order by member_name OFFSET 2 ROWS FETCH NEXT 1 ROWS ONLY);
+
+:r $(TEMP)\sec3.temp
+
+IF @sec3 IS NOT NULL EXEC (N'ALTER AVAILABILITY GROUP [MyAG] JOIN; ALTER AVAILABILITY GROUP [MyAG] GRANT CREATE ANY DATABASE;')
+
+GO
+
+-- Join AG on fourth replica node
+DECLARE @sec4 NVARCHAR(128) = (SELECT member_name from master.sys.dm_hadr_cluster_members where member_name like 'sql-%' and member_name not like @@servername order by member_name OFFSET 3 ROWS FETCH NEXT 1 ROWS ONLY);
+
+:r $(TEMP)\sec4.temp
+
+IF @sec4 IS NOT NULL EXEC (N'ALTER AVAILABILITY GROUP [MyAG] JOIN; ALTER AVAILABILITY GROUP [MyAG] GRANT CREATE ANY DATABASE;')
 
 GO
