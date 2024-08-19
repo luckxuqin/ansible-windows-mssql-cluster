@@ -161,7 +161,7 @@ GO
 :Out stdout
 
 --- write connect argument to first replica node
-DECLARE @sec1 varchar(120) = (SELECT TOP 1 member_name from master.sys.dm_hadr_cluster_members where member_name like 'sql-%' and member_name not like @@servername);
+DECLARE @sec1 varchar(120) = (SELECT TOP 1 member_name from master.sys.dm_hadr_cluster_members where member_name like 'sql-%' and member_name not like @@servername order by member_name);
 :Out $(TEMP)\sec1.temp
 PRINT ':connect ' +  @sec1 + '';
 GO
@@ -328,7 +328,7 @@ IF @sec4 IS NOT NULL EXEC
 GO
 
 -- Define nodes
-DECLARE @sec1 NVARCHAR(128) = (SELECT TOP 1 member_name from master.sys.dm_hadr_cluster_members where member_name like 'sql-%' and member_name not like @@servername);
+DECLARE @sec1 NVARCHAR(128) = (SELECT TOP 1 member_name from master.sys.dm_hadr_cluster_members where member_name like 'sql-%' and member_name not like @@servername order by member_name);
 DECLARE	@sec2 NVARCHAR(128) = (SELECT member_name from master.sys.dm_hadr_cluster_members where member_name like 'sql-%' and member_name not like @@servername order by member_name OFFSET 1 ROWS FETCH NEXT 1 ROWS ONLY);
 DECLARE @sec3 NVARCHAR(128) = (SELECT member_name from master.sys.dm_hadr_cluster_members where member_name like 'sql-%' and member_name not like @@servername order by member_name OFFSET 2 ROWS FETCH NEXT 1 ROWS ONLY);
 DECLARE @sec4 NVARCHAR(128) = (SELECT member_name from master.sys.dm_hadr_cluster_members where member_name like 'sql-%' and member_name not like @@servername order by member_name OFFSET 3 ROWS FETCH NEXT 1 ROWS ONLY);
@@ -403,7 +403,7 @@ EXEC sp_executesql @tsql2;
 GO
 
 -- Join AG on first replica node
-DECLARE @sec1 NVARCHAR(128) = (SELECT TOP 1 member_name from master.sys.dm_hadr_cluster_members where member_name like 'sql-%' and member_name not like @@servername);
+DECLARE @sec1 NVARCHAR(128) = (SELECT TOP 1 member_name from master.sys.dm_hadr_cluster_members where member_name like 'sql-%' and member_name not like @@servername order by member_name);
 
 :r $(TEMP)\sec1.temp
 
