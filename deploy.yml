@@ -215,9 +215,9 @@
 
     - name: Enable AlwaysOn Avail Groups
       ansible.windows.win_shell: | 
+        $node = hostname
         Enable-SqlAlwaysOn -ServerInstance $node -Force
         Restart-Service MSSQLSERVER
-
 
     - name: Set drive/folder permissions for the sql service
       ansible.windows.win_acl:
