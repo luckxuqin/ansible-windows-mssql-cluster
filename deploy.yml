@@ -215,7 +215,7 @@
 
     - name: Enable AlwaysOn Avail Groups
       ansible.windows.win_shell: | 
-        foreach ($node in Get-ClusterNode) {Enable-SqlAlwaysOn -ServerInstance $node -Force}  
+        Enable-SqlAlwaysOn -ServerInstance $node -Force
         Restart-Service MSSQLSERVER
 
 
