@@ -375,7 +375,7 @@ IF @sec2 is not null SET @tsql2 = @tsql2 +
 IF @sec3 is not null SET @tsql2 = @tsql2 + 
 		N', N''' + @sec3 + N''' WITH (
 			ENDPOINT_URL = N''TCP://' + @sec3 + N':5022'',
-			FAILOVER_MODE = AUTOMATIC,
+			FAILOVER_MODE = MANUAL,
 			AVAILABILITY_MODE = ASYNCHRONOUS_COMMIT,
 			BACKUP_PRIORITY = 50, 
 			SEEDING_MODE = AUTOMATIC, 
@@ -385,7 +385,7 @@ IF @sec3 is not null SET @tsql2 = @tsql2 +
 IF @sec4 is not null SET @tsql2 = @tsql2 + 
 		N', N''' + @sec4 + N''' WITH (
 			ENDPOINT_URL = N''TCP://' + @sec4 + N':5022'',
-			FAILOVER_MODE = AUTOMATIC,
+			FAILOVER_MODE = MANUAL,
 			AVAILABILITY_MODE = ASYNCHRONOUS_COMMIT,
 			BACKUP_PRIORITY = 50, 
 			SEEDING_MODE = AUTOMATIC, 
