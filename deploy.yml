@@ -230,6 +230,19 @@
       run_once: true    
       ansible.windows.win_shell: |
         Add-ClusterSharedVolume –Name "Cluster Disk 2"    
+        $path = "C:\ClusterStorage\Volume1\SQLCerts"
+        If(!(test-path -PathType container $path))
+        {
+          New-Item -ItemType Directory -Path $path
+        }
+
+    - name: Grant MSSQL account with full control for SQL Certs directory
+      ansible.windows.win_acl:
+        user: NT Service\MSSQLSERVER
+        path: "C:\ClusterStorage\Volume1\SQLCerts"
+        rights: FullControl
+        type: allow
+        state: present    
 
     - name: Set drive/folder permissions for the sql service
       ansible.windows.win_acl:
