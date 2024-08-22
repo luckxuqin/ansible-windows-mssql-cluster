@@ -194,52 +194,110 @@ GO
 --- create endpoint on primary
 :r $(TEMP)\primary.temp
 
-EXEC
-	(N'USE [master]
+DECLARE @ShareName varchar(250) = 'C:\ClusterStorage\Volume1\SQLCerts'
+DECLARE @StrongPassword varchar(100) = 'P@ssw0rd'
 
-    CREATE ENDPOINT [Hadr_endpoint] 
-        AS TCP (LISTENER_PORT = 5022)
-        FOR DATA_MIRRORING (ROLE = ALL, ENCRYPTION = REQUIRED ALGORITHM AES)
+DECLARE @DynamicSQL varchar(1000);
+DECLARE @CompName varchar(250);
+DECLARE @HasMasterKey INT;
+SELECT @CompName = CONVERT(SysName, SERVERPROPERTY('MachineName'));
+ 
+-- Only create a master key if it doesn't already exist
+ 
+SELECT @HasMasterKey = is_master_key_encrypted_by_server from sys.databases where name = 'master'
+IF (@HasMasterKey = 0)
+BEGIN
+--Create a MASTER KEY to encrypt the certificate.
+SET @DynamicSQL = CONCAT('CREATE MASTER KEY ENCRYPTION BY PASSWORD = ' , QUOTENAME(@StrongPassword, ''''));
+EXEC (@DynamicSQL)
+END
+ 
+--Create the certificate to authenticate the endpoint
+IF EXISTS (SELECT name from sys.certificates WHERE name = QUOTENAME(@CompName + '-Cert'))
+BEGIN
+SET @DynamicSQL = CONCAT('DROP CERTIFICATE ', QUOTENAME(@CompName + '-Cert'));
+EXEC (@DynamicSQL);
+END
+SET @DynamicSQL = CONCAT('CREATE CERTIFICATE ', QUOTENAME(@CompName + '-Cert'), ' WITH SUBJECT = ', QUOTENAME(@CompName, '''')) ;
+EXEC (@DynamicSQL);
+ 
+--Create the database mirroring endpoint authenticated by the certificate.
+SET @DynamicSQL =
+CONCAT('CREATE ENDPOINT [Hadr_endpoint]
+STATE = STARTED
+AS TCP (LISTENER_PORT = 5022, LISTENER_IP = ALL)
+FOR DATABASE_MIRRORING (AUTHENTICATION = CERTIFICATE ',QUOTENAME(@CompName + '-Cert'), ' , ENCRYPTION = REQUIRED ALGORITHM AES, ROLE = ALL)');
+EXEC (@DynamicSQL);
 
-    IF (SELECT state FROM sys.endpoints WHERE name = N''Hadr_endpoint'') <> 0
-    BEGIN
-        ALTER ENDPOINT [Hadr_endpoint] STATE = STARTED
-    END
-
-    IF EXISTS(SELECT * FROM sys.server_event_sessions WHERE name=''AlwaysOn_health'')
-    BEGIN
-    ALTER EVENT SESSION [AlwaysOn_health] ON SERVER WITH (STARTUP_STATE=ON);
-    END
-    IF NOT EXISTS(SELECT * FROM sys.dm_xe_sessions WHERE name=''AlwaysOn_health'')
-    BEGIN
-    ALTER EVENT SESSION [AlwaysOn_health] ON SERVER STATE=START;
-    END')
+SET @DynamicSQL =
+N'IF EXISTS(SELECT * FROM sys.server_event_sessions WHERE name=''AlwaysOn_health'')
+			BEGIN
+			ALTER EVENT SESSION [AlwaysOn_health] ON SERVER WITH (STARTUP_STATE=ON);
+			END
+			IF NOT EXISTS(SELECT * FROM sys.dm_xe_sessions WHERE name=''AlwaysOn_health'')
+			BEGIN
+			ALTER EVENT SESSION [AlwaysOn_health] ON SERVER STATE=START;
+			END'
+EXEC (@DynamicSQL);
+ 
+--Back up the certificate to a common network share for import into other nodes in the cluster
+SET @DynamicSQL = CONCAT('BACKUP CERTIFICATE ',QUOTENAME(@CompName + '-Cert'),' To FILE = ', QUOTENAME( @ShareName + '\SQL-' + @CompName + '.cer', ''''));
+EXEC (@DynamicSQL);
 
 GO
 
 --- create endpoint on first replica node
 :r $(TEMP)\sec1.temp
 
-EXEC
-	(N'USE [master]
+DECLARE @ShareName varchar(250) = 'C:\ClusterStorage\Volume1\SQLCerts'
+DECLARE @StrongPassword varchar(100) = 'P@ssw0rd'
 
-    CREATE ENDPOINT [Hadr_endpoint] 
-        AS TCP (LISTENER_PORT = 5022)
-        FOR DATA_MIRRORING (ROLE = ALL, ENCRYPTION = REQUIRED ALGORITHM AES)
+DECLARE @DynamicSQL varchar(1000);
+DECLARE @CompName varchar(250);
+DECLARE @HasMasterKey INT;
+SELECT @CompName = CONVERT(SysName, SERVERPROPERTY('MachineName'));
+ 
+-- Only create a master key if it doesn't already exist
+ 
+SELECT @HasMasterKey = is_master_key_encrypted_by_server from sys.databases where name = 'master'
+IF (@HasMasterKey = 0)
+BEGIN
+--Create a MASTER KEY to encrypt the certificate.
+SET @DynamicSQL = CONCAT('CREATE MASTER KEY ENCRYPTION BY PASSWORD = ' , QUOTENAME(@StrongPassword, ''''));
+EXEC (@DynamicSQL)
+END
+ 
+--Create the certificate to authenticate the endpoint
+IF EXISTS (SELECT name from sys.certificates WHERE name = QUOTENAME(@CompName + '-Cert'))
+BEGIN
+SET @DynamicSQL = CONCAT('DROP CERTIFICATE ', QUOTENAME(@CompName + '-Cert'));
+EXEC (@DynamicSQL);
+END
+SET @DynamicSQL = CONCAT('CREATE CERTIFICATE ', QUOTENAME(@CompName + '-Cert'), ' WITH SUBJECT = ', QUOTENAME(@CompName, '''')) ;
+EXEC (@DynamicSQL);
+ 
+--Create the database mirroring endpoint authenticated by the certificate.
+SET @DynamicSQL =
+CONCAT('CREATE ENDPOINT [Hadr_endpoint]
+STATE = STARTED
+AS TCP (LISTENER_PORT = 5022, LISTENER_IP = ALL)
+FOR DATABASE_MIRRORING (AUTHENTICATION = CERTIFICATE ',QUOTENAME(@CompName + '-Cert'), ' , ENCRYPTION = REQUIRED ALGORITHM AES, ROLE = ALL)');
+EXEC (@DynamicSQL);
 
-    IF (SELECT state FROM sys.endpoints WHERE name = N''Hadr_endpoint'') <> 0
-    BEGIN
-        ALTER ENDPOINT [Hadr_endpoint] STATE = STARTED
-    END
-
-    IF EXISTS(SELECT * FROM sys.server_event_sessions WHERE name=''AlwaysOn_health'')
-    BEGIN
-    ALTER EVENT SESSION [AlwaysOn_health] ON SERVER WITH (STARTUP_STATE=ON);
-    END
-    IF NOT EXISTS(SELECT * FROM sys.dm_xe_sessions WHERE name=''AlwaysOn_health'')
-    BEGIN
-    ALTER EVENT SESSION [AlwaysOn_health] ON SERVER STATE=START;
-    END')
+SET @DynamicSQL =
+N'IF EXISTS(SELECT * FROM sys.server_event_sessions WHERE name=''AlwaysOn_health'')
+			BEGIN
+			ALTER EVENT SESSION [AlwaysOn_health] ON SERVER WITH (STARTUP_STATE=ON);
+			END
+			IF NOT EXISTS(SELECT * FROM sys.dm_xe_sessions WHERE name=''AlwaysOn_health'')
+			BEGIN
+			ALTER EVENT SESSION [AlwaysOn_health] ON SERVER STATE=START;
+			END'
+EXEC (@DynamicSQL);
+ 
+--Back up the certificate to a common network share for import into other nodes in the cluster
+SET @DynamicSQL = CONCAT('BACKUP CERTIFICATE ',QUOTENAME(@CompName + '-Cert'),' To FILE = ', QUOTENAME( @ShareName + '\SQL-' + @CompName + '.cer', ''''));
+EXEC (@DynamicSQL);
 
 GO
 
@@ -248,26 +306,59 @@ DECLARE @sec2 varchar(120) = (SELECT member_name from master.sys.dm_hadr_cluster
 
 :r $(TEMP)\sec2.temp
 
-IF @sec2 IS NOT NULL EXEC 
-	(N'USE [master]
+IF @sec2 IS NOT NULL
+BEGIN
+	DECLARE @ShareName varchar(250) = 'C:\ClusterStorage\Volume1\SQLCerts'
+	DECLARE @StrongPassword varchar(100) = 'P@ssw0rd'
 
-    CREATE ENDPOINT [Hadr_endpoint] 
-        AS TCP (LISTENER_PORT = 5022)
-        FOR DATA_MIRRORING (ROLE = ALL, ENCRYPTION = REQUIRED ALGORITHM AES)
+	DECLARE @DynamicSQL varchar(1000);
+	DECLARE @CompName varchar(250);
+	DECLARE @HasMasterKey INT;
+	SELECT @CompName = CONVERT(SysName, SERVERPROPERTY('MachineName'));
+ 
+	-- Only create a master key if it doesn't already exist
+ 
+	SELECT @HasMasterKey = is_master_key_encrypted_by_server from sys.databases where name = 'master'
+	IF (@HasMasterKey = 0)
+	BEGIN
+	--Create a MASTER KEY to encrypt the certificate.
+	SET @DynamicSQL = CONCAT('CREATE MASTER KEY ENCRYPTION BY PASSWORD = ' , QUOTENAME(@StrongPassword, ''''));
+	EXEC (@DynamicSQL)
+	END
+  
+	--Create the certificate to authenticate the endpoint
+	IF EXISTS (SELECT name from sys.certificates WHERE name = QUOTENAME(@CompName + '-Cert'))
+	BEGIN
+	SET @DynamicSQL = CONCAT('DROP CERTIFICATE ', QUOTENAME(@CompName + '-Cert'));
+	EXEC (@DynamicSQL);
+	END
+	SET @DynamicSQL = CONCAT('CREATE CERTIFICATE ', QUOTENAME(@CompName + '-Cert'), ' WITH SUBJECT = ', QUOTENAME(@CompName, '''')) ;
+	EXEC (@DynamicSQL);
+ 
+	--Create the database mirroring endpoint authenticated by the certificate.
+	SET @DynamicSQL =
+	CONCAT('CREATE ENDPOINT [Hadr_endpoint]
+	STATE = STARTED
+	AS TCP (LISTENER_PORT = 5022, LISTENER_IP = ALL)
+	FOR DATABASE_MIRRORING (AUTHENTICATION = CERTIFICATE ',QUOTENAME(@CompName + '-Cert'), ' , ENCRYPTION = REQUIRED ALGORITHM AES, ROLE = ALL)');
+	EXEC (@DynamicSQL);
 
-    IF (SELECT state FROM sys.endpoints WHERE name = N''Hadr_endpoint'') <> 0
-    BEGIN
-        ALTER ENDPOINT [Hadr_endpoint] STATE = STARTED
-    END
+	SET @DynamicSQL =
+	N'IF EXISTS(SELECT * FROM sys.server_event_sessions WHERE name=''AlwaysOn_health'')
+				BEGIN
+				ALTER EVENT SESSION [AlwaysOn_health] ON SERVER WITH (STARTUP_STATE=ON);
+				END
+				IF NOT EXISTS(SELECT * FROM sys.dm_xe_sessions WHERE name=''AlwaysOn_health'')
+				BEGIN
+				ALTER EVENT SESSION [AlwaysOn_health] ON SERVER STATE=START;
+				END'
+	EXEC (@DynamicSQL);
+ 
+	--Back up the certificate to a common network share for import into other nodes in the cluster
+	SET @DynamicSQL = CONCAT('BACKUP CERTIFICATE ',QUOTENAME(@CompName + '-Cert'),' To FILE = ', QUOTENAME( @ShareName + '\SQL-' + @CompName + '.cer', ''''));
+	EXEC (@DynamicSQL);
 
-    IF EXISTS(SELECT * FROM sys.server_event_sessions WHERE name=''AlwaysOn_health'')
-    BEGIN
-    ALTER EVENT SESSION [AlwaysOn_health] ON SERVER WITH (STARTUP_STATE=ON);
-    END
-    IF NOT EXISTS(SELECT * FROM sys.dm_xe_sessions WHERE name=''AlwaysOn_health'')
-    BEGIN
-    ALTER EVENT SESSION [AlwaysOn_health] ON SERVER STATE=START;
-    END')
+END
 
 GO
 
@@ -276,26 +367,59 @@ DECLARE @sec3 varchar(120) = (SELECT member_name from master.sys.dm_hadr_cluster
 
 :r $(TEMP)\sec3.temp
 
-IF @sec3 IS NOT NULL EXEC 
-	(N'USE [master]
+IF @sec3 IS NOT NULL
+BEGIN
+	DECLARE @ShareName varchar(250) = 'C:\ClusterStorage\Volume1\SQLCerts'
+	DECLARE @StrongPassword varchar(100) = 'P@ssw0rd'
 
-    CREATE ENDPOINT [Hadr_endpoint] 
-        AS TCP (LISTENER_PORT = 5022)
-        FOR DATA_MIRRORING (ROLE = ALL, ENCRYPTION = REQUIRED ALGORITHM AES)
+	DECLARE @DynamicSQL varchar(1000);
+	DECLARE @CompName varchar(250);
+	DECLARE @HasMasterKey INT;
+	SELECT @CompName = CONVERT(SysName, SERVERPROPERTY('MachineName'));
+ 
+	-- Only create a master key if it doesn't already exist
+ 
+	SELECT @HasMasterKey = is_master_key_encrypted_by_server from sys.databases where name = 'master'
+	IF (@HasMasterKey = 0)
+	BEGIN
+	--Create a MASTER KEY to encrypt the certificate.
+	SET @DynamicSQL = CONCAT('CREATE MASTER KEY ENCRYPTION BY PASSWORD = ' , QUOTENAME(@StrongPassword, ''''));
+	EXEC (@DynamicSQL)
+	END
+ 
+	--Create the certificate to authenticate the endpoint
+	IF EXISTS (SELECT name from sys.certificates WHERE name = QUOTENAME(@CompName + '-Cert'))
+	BEGIN
+	SET @DynamicSQL = CONCAT('DROP CERTIFICATE ', QUOTENAME(@CompName + '-Cert'));
+	EXEC (@DynamicSQL);
+	END
+	SET @DynamicSQL = CONCAT('CREATE CERTIFICATE ', QUOTENAME(@CompName + '-Cert'), ' WITH SUBJECT = ', QUOTENAME(@CompName, '''')) ;
+	EXEC (@DynamicSQL);
+ 
+	--Create the database mirroring endpoint authenticated by the certificate.
+	SET @DynamicSQL =
+	CONCAT('CREATE ENDPOINT [Hadr_endpoint]
+	STATE = STARTED
+	AS TCP (LISTENER_PORT = 5022, LISTENER_IP = ALL)
+	FOR DATABASE_MIRRORING (AUTHENTICATION = CERTIFICATE ',QUOTENAME(@CompName + '-Cert'), ' , ENCRYPTION = REQUIRED ALGORITHM AES, ROLE = ALL)');
+	EXEC (@DynamicSQL);
 
-    IF (SELECT state FROM sys.endpoints WHERE name = N''Hadr_endpoint'') <> 0
-    BEGIN
-        ALTER ENDPOINT [Hadr_endpoint] STATE = STARTED
-    END
+	SET @DynamicSQL =
+	N'IF EXISTS(SELECT * FROM sys.server_event_sessions WHERE name=''AlwaysOn_health'')
+				BEGIN
+				ALTER EVENT SESSION [AlwaysOn_health] ON SERVER WITH (STARTUP_STATE=ON);
+				END
+				IF NOT EXISTS(SELECT * FROM sys.dm_xe_sessions WHERE name=''AlwaysOn_health'')
+				BEGIN
+				ALTER EVENT SESSION [AlwaysOn_health] ON SERVER STATE=START;
+				END'
+	EXEC (@DynamicSQL);
+ 
+	--Back up the certificate to a common network share for import into other nodes in the cluster
+	SET @DynamicSQL = CONCAT('BACKUP CERTIFICATE ',QUOTENAME(@CompName + '-Cert'),' To FILE = ', QUOTENAME( @ShareName + '\SQL-' + @CompName + '.cer', ''''));
+	EXEC (@DynamicSQL);
 
-    IF EXISTS(SELECT * FROM sys.server_event_sessions WHERE name=''AlwaysOn_health'')
-    BEGIN
-    ALTER EVENT SESSION [AlwaysOn_health] ON SERVER WITH (STARTUP_STATE=ON);
-    END
-    IF NOT EXISTS(SELECT * FROM sys.dm_xe_sessions WHERE name=''AlwaysOn_health'')
-    BEGIN
-    ALTER EVENT SESSION [AlwaysOn_health] ON SERVER STATE=START;
-    END')
+END
 
 GO
 
@@ -304,26 +428,429 @@ DECLARE @sec4 varchar(120) = (SELECT member_name from master.sys.dm_hadr_cluster
 
 :r $(TEMP)\sec4.temp
 
-IF @sec4 IS NOT NULL EXEC 
-	(N'USE [master]
+IF @sec4 IS NOT NULL
+BEGIN
+	DECLARE @ShareName varchar(250) = 'C:\ClusterStorage\Volume1\SQLCerts'
+	DECLARE @StrongPassword varchar(100) = 'P@ssw0rd'
 
-    CREATE ENDPOINT [Hadr_endpoint] 
-        AS TCP (LISTENER_PORT = 5022)
-        FOR DATA_MIRRORING (ROLE = ALL, ENCRYPTION = REQUIRED ALGORITHM AES)
+	DECLARE @DynamicSQL varchar(1000);
+	DECLARE @CompName varchar(250);
+	DECLARE @HasMasterKey INT;
+	SELECT @CompName = CONVERT(SysName, SERVERPROPERTY('MachineName'));
+ 
+	-- Only create a master key if it doesn't already exist
+ 
+	SELECT @HasMasterKey = is_master_key_encrypted_by_server from sys.databases where name = 'master'
+	IF (@HasMasterKey = 0)
+	BEGIN
+	--Create a MASTER KEY to encrypt the certificate.
+	SET @DynamicSQL = CONCAT('CREATE MASTER KEY ENCRYPTION BY PASSWORD = ' , QUOTENAME(@StrongPassword, ''''));
+	EXEC (@DynamicSQL)
+	END
+ 
+	--Create the certificate to authenticate the endpoint
+	IF EXISTS (SELECT name from sys.certificates WHERE name = QUOTENAME(@CompName + '-Cert'))
+	BEGIN
+	SET @DynamicSQL = CONCAT('DROP CERTIFICATE ', QUOTENAME(@CompName + '-Cert'));
+	EXEC (@DynamicSQL);
+	END
+	SET @DynamicSQL = CONCAT('CREATE CERTIFICATE ', QUOTENAME(@CompName + '-Cert'), ' WITH SUBJECT = ', QUOTENAME(@CompName, '''')) ;
+	EXEC (@DynamicSQL);
+ 
+	--Create the database mirroring endpoint authenticated by the certificate.
+	SET @DynamicSQL =
+	CONCAT('CREATE ENDPOINT [Hadr_endpoint]
+	STATE = STARTED
+	AS TCP (LISTENER_PORT = 5022, LISTENER_IP = ALL)
+	FOR DATABASE_MIRRORING (AUTHENTICATION = CERTIFICATE ',QUOTENAME(@CompName + '-Cert'), ' , ENCRYPTION = REQUIRED ALGORITHM AES, ROLE = ALL)');
+	EXEC (@DynamicSQL);
 
-    IF (SELECT state FROM sys.endpoints WHERE name = N''Hadr_endpoint'') <> 0
-    BEGIN
-        ALTER ENDPOINT [Hadr_endpoint] STATE = STARTED
-    END
+	SET @DynamicSQL =
+	N'IF EXISTS(SELECT * FROM sys.server_event_sessions WHERE name=''AlwaysOn_health'')
+				BEGIN
+				ALTER EVENT SESSION [AlwaysOn_health] ON SERVER WITH (STARTUP_STATE=ON);
+				END
+				IF NOT EXISTS(SELECT * FROM sys.dm_xe_sessions WHERE name=''AlwaysOn_health'')
+				BEGIN
+				ALTER EVENT SESSION [AlwaysOn_health] ON SERVER STATE=START;
+				END'
+	EXEC (@DynamicSQL);
+ 
+	--Back up the certificate to a common network share for import into other nodes in the cluster
+	SET @DynamicSQL = CONCAT('BACKUP CERTIFICATE ',QUOTENAME(@CompName + '-Cert'),' To FILE = ', QUOTENAME( @ShareName + '\SQL-' + @CompName + '.cer', ''''));
+	EXEC (@DynamicSQL);
 
-    IF EXISTS(SELECT * FROM sys.server_event_sessions WHERE name=''AlwaysOn_health'')
-    BEGIN
-    ALTER EVENT SESSION [AlwaysOn_health] ON SERVER WITH (STARTUP_STATE=ON);
-    END
-    IF NOT EXISTS(SELECT * FROM sys.dm_xe_sessions WHERE name=''AlwaysOn_health'')
-    BEGIN
-    ALTER EVENT SESSION [AlwaysOn_health] ON SERVER STATE=START;
-    END')
+END
+
+GO
+
+-- Restore SQL certs on primary
+:r $(TEMP)\primary.temp
+
+DECLARE @node1 NVARCHAR(128) = (SELECT TOP 1 member_name from master.sys.dm_hadr_cluster_members where member_name like 'sql-%' and member_name not like @@servername order by member_name);
+DECLARE	@node2 NVARCHAR(128) = (SELECT member_name from master.sys.dm_hadr_cluster_members where member_name like 'sql-%' and member_name not like @@servername order by member_name OFFSET 1 ROWS FETCH NEXT 1 ROWS ONLY);
+DECLARE @node3 NVARCHAR(128) = (SELECT member_name from master.sys.dm_hadr_cluster_members where member_name like 'sql-%' and member_name not like @@servername order by member_name OFFSET 2 ROWS FETCH NEXT 1 ROWS ONLY);
+DECLARE @node4 NVARCHAR(128) = (SELECT member_name from master.sys.dm_hadr_cluster_members where member_name like 'sql-%' and member_name not like @@servername order by member_name OFFSET 3 ROWS FETCH NEXT 1 ROWS ONLY);
+
+DECLARE @ShareName varchar(250) = 'C:\ClusterStorage\Volume1\SQLCerts'
+DECLARE @StrongPassword varchar(100) = 'P@ssw0rd'
+DECLARE @DynamicSQL varchar(1000);
+ 
+SET @DynamicSQL = CONCAT('CREATE LOGIN ', QUOTENAME (@node1 + '-Login'), ' WITH PASSWORD= ', QUOTENAME( @StrongPassword, ''''));
+EXEC (@DynamicSQL);
+
+SET @DynamicSQL = CONCAT('CREATE USER ', QUOTENAME( @node1 + '-User'), ' FOR LOGIN ', QUOTENAME(@node1 + '-Login'));
+EXEC (@DynamicSQL);
+
+SET @DynamicSQL = CONCAT('CREATE CERTIFICATE ', QUOTENAME(@node1 +'-Cert'), ' AUTHORIZATION ', QUOTENAME(@node1 +'-User'), ' FROM FILE = ', QUOTENAME(@ShareName + '\SQL-' + @node1 + '.cer' , ''''));
+EXEC (@DynamicSQL);
+ 
+SET @DynamicSQL = CONCAT('GRANT CONNECT ON ENDPOINT::Hadr_endpoint TO ', QUOTENAME(@node1 +'-Login'));
+EXEC (@DynamicSQL);
+
+IF @node2 is not null
+BEGIN
+	SET @DynamicSQL = CONCAT('CREATE LOGIN ', QUOTENAME (@node2 + '-Login'), ' WITH PASSWORD= ', QUOTENAME( @StrongPassword, ''''));
+	EXEC (@DynamicSQL);
+
+	SET @DynamicSQL = CONCAT('CREATE USER ', QUOTENAME( @node2 + '-User'), ' FOR LOGIN ', QUOTENAME(@node2 + '-Login'));
+	EXEC (@DynamicSQL);
+
+	SET @DynamicSQL = CONCAT('CREATE CERTIFICATE ', QUOTENAME(@node2 +'-Cert'), ' AUTHORIZATION ', QUOTENAME(@node2 +'-User'), ' FROM FILE = ', QUOTENAME(@ShareName + '\SQL-' + @node2 + '.cer' , ''''));
+	EXEC (@DynamicSQL);
+ 
+	SET @DynamicSQL = CONCAT('GRANT CONNECT ON ENDPOINT::Hadr_endpoint TO ', QUOTENAME(@node2 +'-Login'));
+	EXEC (@DynamicSQL);
+END
+
+IF @node3 is not null
+BEGIN
+	SET @DynamicSQL = CONCAT('CREATE LOGIN ', QUOTENAME (@node3 + '-Login'), ' WITH PASSWORD= ', QUOTENAME( @StrongPassword, ''''));
+	EXEC (@DynamicSQL);
+
+	SET @DynamicSQL = CONCAT('CREATE USER ', QUOTENAME( @node3 + '-User'), ' FOR LOGIN ', QUOTENAME(@node3 + '-Login'));
+	EXEC (@DynamicSQL);
+
+	SET @DynamicSQL = CONCAT('CREATE CERTIFICATE ', QUOTENAME(@node3 +'-Cert'), ' AUTHORIZATION ', QUOTENAME(@node3 +'-User'), ' FROM FILE = ', QUOTENAME(@ShareName + '\SQL-' + @node3 + '.cer' , ''''));
+	EXEC (@DynamicSQL);
+ 
+	SET @DynamicSQL = CONCAT('GRANT CONNECT ON ENDPOINT::Hadr_endpoint TO ', QUOTENAME(@node3 +'-Login'));
+	EXEC (@DynamicSQL);
+END
+
+IF @node4 is not null
+BEGIN
+	SET @DynamicSQL = CONCAT('CREATE LOGIN ', QUOTENAME (@node4 + '-Login'), ' WITH PASSWORD= ', QUOTENAME( @StrongPassword, ''''));
+	EXEC (@DynamicSQL);
+
+	SET @DynamicSQL = CONCAT('CREATE USER ', QUOTENAME( @node4 + '-User'), ' FOR LOGIN ', QUOTENAME(@node4 + '-Login'));
+	EXEC (@DynamicSQL);
+
+	SET @DynamicSQL = CONCAT('CREATE CERTIFICATE ', QUOTENAME(@node4 +'-Cert'), ' AUTHORIZATION ', QUOTENAME(@node4 +'-User'), ' FROM FILE = ', QUOTENAME(@ShareName + '\SQL-' + @node4 + '.cer' , ''''));
+	EXEC (@DynamicSQL);
+ 
+	SET @DynamicSQL = CONCAT('GRANT CONNECT ON ENDPOINT::Hadr_endpoint TO ', QUOTENAME(@node4 +'-Login'));
+	EXEC (@DynamicSQL);
+END
+
+GO
+
+-- Restore SQL certs on the first replica node
+:r $(TEMP)\sec1.temp
+
+DECLARE @node1 NVARCHAR(128) = (SELECT TOP 1 member_name from master.sys.dm_hadr_cluster_members where member_name like 'sql-%' and member_name not like @@servername order by member_name);
+DECLARE	@node2 NVARCHAR(128) = (SELECT member_name from master.sys.dm_hadr_cluster_members where member_name like 'sql-%' and member_name not like @@servername order by member_name OFFSET 1 ROWS FETCH NEXT 1 ROWS ONLY);
+DECLARE @node3 NVARCHAR(128) = (SELECT member_name from master.sys.dm_hadr_cluster_members where member_name like 'sql-%' and member_name not like @@servername order by member_name OFFSET 2 ROWS FETCH NEXT 1 ROWS ONLY);
+DECLARE @node4 NVARCHAR(128) = (SELECT member_name from master.sys.dm_hadr_cluster_members where member_name like 'sql-%' and member_name not like @@servername order by member_name OFFSET 3 ROWS FETCH NEXT 1 ROWS ONLY);
+
+DECLARE @ShareName varchar(250) = 'C:\ClusterStorage\Volume1\SQLCerts'
+DECLARE @StrongPassword varchar(100) = 'P@ssw0rd'
+DECLARE @DynamicSQL varchar(1000);
+ 
+SET @DynamicSQL = CONCAT('CREATE LOGIN ', QUOTENAME (@node1 + '-Login'), ' WITH PASSWORD= ', QUOTENAME( @StrongPassword, ''''));
+EXEC (@DynamicSQL);
+
+SET @DynamicSQL = CONCAT('CREATE USER ', QUOTENAME( @node1 + '-User'), ' FOR LOGIN ', QUOTENAME(@node1 + '-Login'));
+EXEC (@DynamicSQL);
+
+SET @DynamicSQL = CONCAT('CREATE CERTIFICATE ', QUOTENAME(@node1 +'-Cert'), ' AUTHORIZATION ', QUOTENAME(@node1 +'-User'), ' FROM FILE = ', QUOTENAME(@ShareName + '\SQL-' + @node1 + '.cer' , ''''));
+EXEC (@DynamicSQL);
+ 
+SET @DynamicSQL = CONCAT('GRANT CONNECT ON ENDPOINT::Hadr_endpoint TO ', QUOTENAME(@node1 +'-Login'));
+EXEC (@DynamicSQL);
+
+IF @node2 is not null
+BEGIN
+	SET @DynamicSQL = CONCAT('CREATE LOGIN ', QUOTENAME (@node2 + '-Login'), ' WITH PASSWORD= ', QUOTENAME( @StrongPassword, ''''));
+	EXEC (@DynamicSQL);
+
+	SET @DynamicSQL = CONCAT('CREATE USER ', QUOTENAME( @node2 + '-User'), ' FOR LOGIN ', QUOTENAME(@node2 + '-Login'));
+	EXEC (@DynamicSQL);
+
+	SET @DynamicSQL = CONCAT('CREATE CERTIFICATE ', QUOTENAME(@node2 +'-Cert'), ' AUTHORIZATION ', QUOTENAME(@node2 +'-User'), ' FROM FILE = ', QUOTENAME(@ShareName + '\SQL-' + @node2 + '.cer' , ''''));
+	EXEC (@DynamicSQL);
+ 
+	SET @DynamicSQL = CONCAT('GRANT CONNECT ON ENDPOINT::Hadr_endpoint TO ', QUOTENAME(@node2 +'-Login'));
+	EXEC (@DynamicSQL);
+END
+
+IF @node3 is not null
+BEGIN
+	SET @DynamicSQL = CONCAT('CREATE LOGIN ', QUOTENAME (@node3 + '-Login'), ' WITH PASSWORD= ', QUOTENAME( @StrongPassword, ''''));
+	EXEC (@DynamicSQL);
+
+	SET @DynamicSQL = CONCAT('CREATE USER ', QUOTENAME( @node3 + '-User'), ' FOR LOGIN ', QUOTENAME(@node3 + '-Login'));
+	EXEC (@DynamicSQL);
+
+	SET @DynamicSQL = CONCAT('CREATE CERTIFICATE ', QUOTENAME(@node3 +'-Cert'), ' AUTHORIZATION ', QUOTENAME(@node3 +'-User'), ' FROM FILE = ', QUOTENAME(@ShareName + '\SQL-' + @node3 + '.cer' , ''''));
+	EXEC (@DynamicSQL);
+ 
+	SET @DynamicSQL = CONCAT('GRANT CONNECT ON ENDPOINT::Hadr_endpoint TO ', QUOTENAME(@node3 +'-Login'));
+	EXEC (@DynamicSQL);
+END
+
+IF @node4 is not null
+BEGIN
+	SET @DynamicSQL = CONCAT('CREATE LOGIN ', QUOTENAME (@node4 + '-Login'), ' WITH PASSWORD= ', QUOTENAME( @StrongPassword, ''''));
+	EXEC (@DynamicSQL);
+
+	SET @DynamicSQL = CONCAT('CREATE USER ', QUOTENAME( @node4 + '-User'), ' FOR LOGIN ', QUOTENAME(@node4 + '-Login'));
+	EXEC (@DynamicSQL);
+
+	SET @DynamicSQL = CONCAT('CREATE CERTIFICATE ', QUOTENAME(@node4 +'-Cert'), ' AUTHORIZATION ', QUOTENAME(@node4 +'-User'), ' FROM FILE = ', QUOTENAME(@ShareName + '\SQL-' + @node4 + '.cer' , ''''));
+	EXEC (@DynamicSQL);
+ 
+	SET @DynamicSQL = CONCAT('GRANT CONNECT ON ENDPOINT::Hadr_endpoint TO ', QUOTENAME(@node4 +'-Login'));
+	EXEC (@DynamicSQL);
+END
+
+GO
+
+-- Restore SQL certs on the second replica node
+DECLARE	@sec2 NVARCHAR(128) = (SELECT member_name from master.sys.dm_hadr_cluster_members where member_name like 'sql-%' and member_name not like @@servername order by member_name OFFSET 1 ROWS FETCH NEXT 1 ROWS ONLY);
+
+:r $(TEMP)\sec2.temp
+
+IF @sec2 is not null
+BEGIN
+	DECLARE @node1 NVARCHAR(128) = (SELECT TOP 1 member_name from master.sys.dm_hadr_cluster_members where member_name like 'sql-%' and member_name not like @@servername order by member_name);
+	DECLARE	@node2 NVARCHAR(128) = (SELECT member_name from master.sys.dm_hadr_cluster_members where member_name like 'sql-%' and member_name not like @@servername order by member_name OFFSET 1 ROWS FETCH NEXT 1 ROWS ONLY);
+	DECLARE @node3 NVARCHAR(128) = (SELECT member_name from master.sys.dm_hadr_cluster_members where member_name like 'sql-%' and member_name not like @@servername order by member_name OFFSET 2 ROWS FETCH NEXT 1 ROWS ONLY);
+	DECLARE @node4 NVARCHAR(128) = (SELECT member_name from master.sys.dm_hadr_cluster_members where member_name like 'sql-%' and member_name not like @@servername order by member_name OFFSET 3 ROWS FETCH NEXT 1 ROWS ONLY);
+
+	DECLARE @ShareName varchar(250) = 'C:\ClusterStorage\Volume1\SQLCerts'
+	DECLARE @StrongPassword varchar(100) = 'P@ssw0rd'
+	DECLARE @DynamicSQL varchar(1000);
+ 
+	SET @DynamicSQL = CONCAT('CREATE LOGIN ', QUOTENAME (@node1 + '-Login'), ' WITH PASSWORD= ', QUOTENAME( @StrongPassword, ''''));
+	EXEC (@DynamicSQL);
+
+	SET @DynamicSQL = CONCAT('CREATE USER ', QUOTENAME( @node1 + '-User'), ' FOR LOGIN ', QUOTENAME(@node1 + '-Login'));
+	EXEC (@DynamicSQL);
+
+	SET @DynamicSQL = CONCAT('CREATE CERTIFICATE ', QUOTENAME(@node1 +'-Cert'), ' AUTHORIZATION ', QUOTENAME(@node1 +'-User'), ' FROM FILE = ', QUOTENAME(@ShareName + '\SQL-' + @node1 + '.cer' , ''''));
+	EXEC (@DynamicSQL);
+ 
+	SET @DynamicSQL = CONCAT('GRANT CONNECT ON ENDPOINT::Hadr_endpoint TO ', QUOTENAME(@node1 +'-Login'));
+	EXEC (@DynamicSQL);
+
+	IF @node2 is not null
+	BEGIN
+		SET @DynamicSQL = CONCAT('CREATE LOGIN ', QUOTENAME (@node2 + '-Login'), ' WITH PASSWORD= ', QUOTENAME( @StrongPassword, ''''));
+		EXEC (@DynamicSQL);
+
+		SET @DynamicSQL = CONCAT('CREATE USER ', QUOTENAME( @node2 + '-User'), ' FOR LOGIN ', QUOTENAME(@node2 + '-Login'));
+		EXEC (@DynamicSQL);
+
+		SET @DynamicSQL = CONCAT('CREATE CERTIFICATE ', QUOTENAME(@node2 +'-Cert'), ' AUTHORIZATION ', QUOTENAME(@node2 +'-User'), ' FROM FILE = ', QUOTENAME(@ShareName + '\SQL-' + @node2 + '.cer' , ''''));
+		EXEC (@DynamicSQL);
+ 
+		SET @DynamicSQL = CONCAT('GRANT CONNECT ON ENDPOINT::Hadr_endpoint TO ', QUOTENAME(@node2 +'-Login'));
+		EXEC (@DynamicSQL);
+	END
+
+	IF @node3 is not null
+	BEGIN
+		SET @DynamicSQL = CONCAT('CREATE LOGIN ', QUOTENAME (@node3 + '-Login'), ' WITH PASSWORD= ', QUOTENAME( @StrongPassword, ''''));
+		EXEC (@DynamicSQL);
+
+		SET @DynamicSQL = CONCAT('CREATE USER ', QUOTENAME( @node3 + '-User'), ' FOR LOGIN ', QUOTENAME(@node3 + '-Login'));
+		EXEC (@DynamicSQL);
+
+		SET @DynamicSQL = CONCAT('CREATE CERTIFICATE ', QUOTENAME(@node3 +'-Cert'), ' AUTHORIZATION ', QUOTENAME(@node3 +'-User'), ' FROM FILE = ', QUOTENAME(@ShareName + '\SQL-' + @node3 + '.cer' , ''''));
+		EXEC (@DynamicSQL);
+ 
+		SET @DynamicSQL = CONCAT('GRANT CONNECT ON ENDPOINT::Hadr_endpoint TO ', QUOTENAME(@node3 +'-Login'));
+		EXEC (@DynamicSQL);
+	END
+
+	IF @node4 is not null
+	BEGIN
+		SET @DynamicSQL = CONCAT('CREATE LOGIN ', QUOTENAME (@node4 + '-Login'), ' WITH PASSWORD= ', QUOTENAME( @StrongPassword, ''''));
+		EXEC (@DynamicSQL);
+
+		SET @DynamicSQL = CONCAT('CREATE USER ', QUOTENAME( @node4 + '-User'), ' FOR LOGIN ', QUOTENAME(@node4 + '-Login'));
+		EXEC (@DynamicSQL);
+
+		SET @DynamicSQL = CONCAT('CREATE CERTIFICATE ', QUOTENAME(@node4 +'-Cert'), ' AUTHORIZATION ', QUOTENAME(@node4 +'-User'), ' FROM FILE = ', QUOTENAME(@ShareName + '\SQL-' + @node4 + '.cer' , ''''));
+		EXEC (@DynamicSQL);
+ 
+		SET @DynamicSQL = CONCAT('GRANT CONNECT ON ENDPOINT::Hadr_endpoint TO ', QUOTENAME(@node4 +'-Login'));
+		EXEC (@DynamicSQL);
+	END
+END
+
+GO
+
+-- Restore SQL certs on the third replica node
+DECLARE	@sec3 NVARCHAR(128) = (SELECT member_name from master.sys.dm_hadr_cluster_members where member_name like 'sql-%' and member_name not like @@servername order by member_name OFFSET 2 ROWS FETCH NEXT 1 ROWS ONLY);
+
+:r $(TEMP)\sec3.temp
+
+IF @sec3 is not null
+BEGIN
+	DECLARE @node1 NVARCHAR(128) = (SELECT TOP 1 member_name from master.sys.dm_hadr_cluster_members where member_name like 'sql-%' and member_name not like @@servername order by member_name);
+	DECLARE	@node2 NVARCHAR(128) = (SELECT member_name from master.sys.dm_hadr_cluster_members where member_name like 'sql-%' and member_name not like @@servername order by member_name OFFSET 1 ROWS FETCH NEXT 1 ROWS ONLY);
+	DECLARE @node3 NVARCHAR(128) = (SELECT member_name from master.sys.dm_hadr_cluster_members where member_name like 'sql-%' and member_name not like @@servername order by member_name OFFSET 2 ROWS FETCH NEXT 1 ROWS ONLY);
+	DECLARE @node4 NVARCHAR(128) = (SELECT member_name from master.sys.dm_hadr_cluster_members where member_name like 'sql-%' and member_name not like @@servername order by member_name OFFSET 3 ROWS FETCH NEXT 1 ROWS ONLY);
+
+	DECLARE @ShareName varchar(250) = 'C:\ClusterStorage\Volume1\SQLCerts'
+	DECLARE @StrongPassword varchar(100) = 'P@ssw0rd'
+	DECLARE @DynamicSQL varchar(1000);
+ 
+	SET @DynamicSQL = CONCAT('CREATE LOGIN ', QUOTENAME (@node1 + '-Login'), ' WITH PASSWORD= ', QUOTENAME( @StrongPassword, ''''));
+	EXEC (@DynamicSQL);
+
+	SET @DynamicSQL = CONCAT('CREATE USER ', QUOTENAME( @node1 + '-User'), ' FOR LOGIN ', QUOTENAME(@node1 + '-Login'));
+	EXEC (@DynamicSQL);
+
+	SET @DynamicSQL = CONCAT('CREATE CERTIFICATE ', QUOTENAME(@node1 +'-Cert'), ' AUTHORIZATION ', QUOTENAME(@node1 +'-User'), ' FROM FILE = ', QUOTENAME(@ShareName + '\SQL-' + @node1 + '.cer' , ''''));
+	EXEC (@DynamicSQL);
+ 
+	SET @DynamicSQL = CONCAT('GRANT CONNECT ON ENDPOINT::Hadr_endpoint TO ', QUOTENAME(@node1 +'-Login'));
+	EXEC (@DynamicSQL);
+
+	IF @node2 is not null
+	BEGIN
+		SET @DynamicSQL = CONCAT('CREATE LOGIN ', QUOTENAME (@node2 + '-Login'), ' WITH PASSWORD= ', QUOTENAME( @StrongPassword, ''''));
+		EXEC (@DynamicSQL);
+
+		SET @DynamicSQL = CONCAT('CREATE USER ', QUOTENAME( @node2 + '-User'), ' FOR LOGIN ', QUOTENAME(@node2 + '-Login'));
+		EXEC (@DynamicSQL);
+
+		SET @DynamicSQL = CONCAT('CREATE CERTIFICATE ', QUOTENAME(@node2 +'-Cert'), ' AUTHORIZATION ', QUOTENAME(@node2 +'-User'), ' FROM FILE = ', QUOTENAME(@ShareName + '\SQL-' + @node2 + '.cer' , ''''));
+		EXEC (@DynamicSQL);
+ 
+		SET @DynamicSQL = CONCAT('GRANT CONNECT ON ENDPOINT::Hadr_endpoint TO ', QUOTENAME(@node2 +'-Login'));
+		EXEC (@DynamicSQL);
+	END
+
+	IF @node3 is not null
+	BEGIN
+		SET @DynamicSQL = CONCAT('CREATE LOGIN ', QUOTENAME (@node3 + '-Login'), ' WITH PASSWORD= ', QUOTENAME( @StrongPassword, ''''));
+		EXEC (@DynamicSQL);
+
+		SET @DynamicSQL = CONCAT('CREATE USER ', QUOTENAME( @node3 + '-User'), ' FOR LOGIN ', QUOTENAME(@node3 + '-Login'));
+		EXEC (@DynamicSQL);
+
+		SET @DynamicSQL = CONCAT('CREATE CERTIFICATE ', QUOTENAME(@node3 +'-Cert'), ' AUTHORIZATION ', QUOTENAME(@node3 +'-User'), ' FROM FILE = ', QUOTENAME(@ShareName + '\SQL-' + @node3 + '.cer' , ''''));
+		EXEC (@DynamicSQL);
+ 
+		SET @DynamicSQL = CONCAT('GRANT CONNECT ON ENDPOINT::Hadr_endpoint TO ', QUOTENAME(@node3 +'-Login'));
+		EXEC (@DynamicSQL);
+	END
+
+	IF @node4 is not null
+	BEGIN
+		SET @DynamicSQL = CONCAT('CREATE LOGIN ', QUOTENAME (@node4 + '-Login'), ' WITH PASSWORD= ', QUOTENAME( @StrongPassword, ''''));
+		EXEC (@DynamicSQL);
+
+		SET @DynamicSQL = CONCAT('CREATE USER ', QUOTENAME( @node4 + '-User'), ' FOR LOGIN ', QUOTENAME(@node4 + '-Login'));
+		EXEC (@DynamicSQL);
+
+		SET @DynamicSQL = CONCAT('CREATE CERTIFICATE ', QUOTENAME(@node4 +'-Cert'), ' AUTHORIZATION ', QUOTENAME(@node4 +'-User'), ' FROM FILE = ', QUOTENAME(@ShareName + '\SQL-' + @node4 + '.cer' , ''''));
+		EXEC (@DynamicSQL);
+ 
+		SET @DynamicSQL = CONCAT('GRANT CONNECT ON ENDPOINT::Hadr_endpoint TO ', QUOTENAME(@node4 +'-Login'));
+		EXEC (@DynamicSQL);
+	END
+END
+
+GO
+
+-- Restore SQL certs on the fourth replica node
+DECLARE	@sec4 NVARCHAR(128) = (SELECT member_name from master.sys.dm_hadr_cluster_members where member_name like 'sql-%' and member_name not like @@servername order by member_name OFFSET 3 ROWS FETCH NEXT 1 ROWS ONLY);
+
+:r $(TEMP)\sec4.temp
+
+IF @sec4 is not null
+BEGIN
+	DECLARE @node1 NVARCHAR(128) = (SELECT TOP 1 member_name from master.sys.dm_hadr_cluster_members where member_name like 'sql-%' and member_name not like @@servername order by member_name);
+	DECLARE	@node2 NVARCHAR(128) = (SELECT member_name from master.sys.dm_hadr_cluster_members where member_name like 'sql-%' and member_name not like @@servername order by member_name OFFSET 1 ROWS FETCH NEXT 1 ROWS ONLY);
+	DECLARE @node3 NVARCHAR(128) = (SELECT member_name from master.sys.dm_hadr_cluster_members where member_name like 'sql-%' and member_name not like @@servername order by member_name OFFSET 2 ROWS FETCH NEXT 1 ROWS ONLY);
+	DECLARE @node4 NVARCHAR(128) = (SELECT member_name from master.sys.dm_hadr_cluster_members where member_name like 'sql-%' and member_name not like @@servername order by member_name OFFSET 3 ROWS FETCH NEXT 1 ROWS ONLY);
+
+	DECLARE @ShareName varchar(250) = 'C:\ClusterStorage\Volume1\SQLCerts'
+	DECLARE @StrongPassword varchar(100) = 'P@ssw0rd'
+	DECLARE @DynamicSQL varchar(1000);
+ 
+	SET @DynamicSQL = CONCAT('CREATE LOGIN ', QUOTENAME (@node1 + '-Login'), ' WITH PASSWORD= ', QUOTENAME( @StrongPassword, ''''));
+	EXEC (@DynamicSQL);
+
+	SET @DynamicSQL = CONCAT('CREATE USER ', QUOTENAME( @node1 + '-User'), ' FOR LOGIN ', QUOTENAME(@node1 + '-Login'));
+	EXEC (@DynamicSQL);
+
+	SET @DynamicSQL = CONCAT('CREATE CERTIFICATE ', QUOTENAME(@node1 +'-Cert'), ' AUTHORIZATION ', QUOTENAME(@node1 +'-User'), ' FROM FILE = ', QUOTENAME(@ShareName + '\SQL-' + @node1 + '.cer' , ''''));
+	EXEC (@DynamicSQL);
+ 
+	SET @DynamicSQL = CONCAT('GRANT CONNECT ON ENDPOINT::Hadr_endpoint TO ', QUOTENAME(@node1 +'-Login'));
+	EXEC (@DynamicSQL);
+
+	IF @node2 is not null
+	BEGIN
+		SET @DynamicSQL = CONCAT('CREATE LOGIN ', QUOTENAME (@node2 + '-Login'), ' WITH PASSWORD= ', QUOTENAME( @StrongPassword, ''''));
+		EXEC (@DynamicSQL);
+
+		SET @DynamicSQL = CONCAT('CREATE USER ', QUOTENAME( @node2 + '-User'), ' FOR LOGIN ', QUOTENAME(@node2 + '-Login'));
+		EXEC (@DynamicSQL);
+
+		SET @DynamicSQL = CONCAT('CREATE CERTIFICATE ', QUOTENAME(@node2 +'-Cert'), ' AUTHORIZATION ', QUOTENAME(@node2 +'-User'), ' FROM FILE = ', QUOTENAME(@ShareName + '\SQL-' + @node2 + '.cer' , ''''));
+		EXEC (@DynamicSQL);
+ 
+		SET @DynamicSQL = CONCAT('GRANT CONNECT ON ENDPOINT::Hadr_endpoint TO ', QUOTENAME(@node2 +'-Login'));
+		EXEC (@DynamicSQL);
+	END
+
+	IF @node3 is not null
+	BEGIN
+		SET @DynamicSQL = CONCAT('CREATE LOGIN ', QUOTENAME (@node3 + '-Login'), ' WITH PASSWORD= ', QUOTENAME( @StrongPassword, ''''));
+		EXEC (@DynamicSQL);
+
+		SET @DynamicSQL = CONCAT('CREATE USER ', QUOTENAME( @node3 + '-User'), ' FOR LOGIN ', QUOTENAME(@node3 + '-Login'));
+		EXEC (@DynamicSQL);
+
+		SET @DynamicSQL = CONCAT('CREATE CERTIFICATE ', QUOTENAME(@node3 +'-Cert'), ' AUTHORIZATION ', QUOTENAME(@node3 +'-User'), ' FROM FILE = ', QUOTENAME(@ShareName + '\SQL-' + @node3 + '.cer' , ''''));
+		EXEC (@DynamicSQL);
+ 
+		SET @DynamicSQL = CONCAT('GRANT CONNECT ON ENDPOINT::Hadr_endpoint TO ', QUOTENAME(@node3 +'-Login'));
+		EXEC (@DynamicSQL);
+	END
+
+	IF @node4 is not null
+	BEGIN
+		SET @DynamicSQL = CONCAT('CREATE LOGIN ', QUOTENAME (@node4 + '-Login'), ' WITH PASSWORD= ', QUOTENAME( @StrongPassword, ''''));
+		EXEC (@DynamicSQL);
+
+		SET @DynamicSQL = CONCAT('CREATE USER ', QUOTENAME( @node4 + '-User'), ' FOR LOGIN ', QUOTENAME(@node4 + '-Login'));
+		EXEC (@DynamicSQL);
+
+		SET @DynamicSQL = CONCAT('CREATE CERTIFICATE ', QUOTENAME(@node4 +'-Cert'), ' AUTHORIZATION ', QUOTENAME(@node4 +'-User'), ' FROM FILE = ', QUOTENAME(@ShareName + '\SQL-' + @node4 + '.cer' , ''''));
+		EXEC (@DynamicSQL);
+ 
+		SET @DynamicSQL = CONCAT('GRANT CONNECT ON ENDPOINT::Hadr_endpoint TO ', QUOTENAME(@node4 +'-Login'));
+		EXEC (@DynamicSQL);
+	END
+END
 
 GO
 
@@ -437,3 +964,4 @@ DECLARE @sec4 NVARCHAR(128) = (SELECT member_name from master.sys.dm_hadr_cluste
 IF @sec4 IS NOT NULL EXEC (N'ALTER AVAILABILITY GROUP [MyAG] JOIN; ALTER AVAILABILITY GROUP [MyAG] GRANT CREATE ANY DATABASE;')
 
 GO
+
