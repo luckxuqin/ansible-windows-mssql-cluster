@@ -6,7 +6,10 @@
   ansible.builtin.include_tasks: get_cluster_ip.yml      
     
 - name: Initialise Disks
-  ansible.builtin.include_tasks: init_disks.yml 
+  ansible.builtin.include_tasks: init_disks.yml
+  
+- name: Join Domain
+  ansible.builtin.include_tasks: join_domain.yml  
 
 - name: Install Software Components
   ansible.builtin.include_tasks: install_software.yml 
