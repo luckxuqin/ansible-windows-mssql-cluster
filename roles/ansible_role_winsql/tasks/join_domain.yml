@@ -7,7 +7,7 @@
     domain_ou_path: "OU=VIDM,DC=tmm,DC=lab"
     state: domain
 
-    - name: Reboot the machine if joining the domain requires a restart
-      ansible.windows.win_reboot:
-        reboot_timeout: 600
-      when: domain_status.reboot_required
+- name: Reboot the machine if joining the domain requires a restart
+  ansible.windows.win_reboot:
+    reboot_timeout: 600
+  when: domain_status.reboot_required
