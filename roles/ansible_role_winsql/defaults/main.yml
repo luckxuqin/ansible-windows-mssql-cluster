@@ -17,7 +17,7 @@ cluster_ip_path: '%USERPROFILE%\ansible.cluster_ip'
 
 windows_cluster: null
 
-sysadmin_user: Administrator
+sysadmin_user: tmm\mark.xu
 
 
 
