@@ -8,8 +8,8 @@
 - name: Initialise Disks
   ansible.builtin.include_tasks: init_disks.yml
   
-# - name: Join Domain
-#  ansible.builtin.include_tasks: join_domain.yml  
+- name: Join Domain
+  ansible.builtin.include_tasks: join_domain.yml  
 
 - name: Install Software Components
   ansible.builtin.include_tasks: install_software.yml 
