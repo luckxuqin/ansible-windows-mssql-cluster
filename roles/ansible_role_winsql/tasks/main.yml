@@ -5,7 +5,7 @@
 - name: Get Cluster IP
   ansible.builtin.include_tasks: get_cluster_ip.yml      
 
- - name: Join Domain
+- name: Join Domain
   ansible.builtin.include_tasks: join_domain.yml    
 
 - name: Initialise Disks
