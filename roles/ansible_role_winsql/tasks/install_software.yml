@@ -62,23 +62,12 @@
   win_chocolatey:
     name: sql-server-2022
     state: present
-    package_params: /SQLSYSADMINACCOUNTS:{{ computerName }}\{{ sysadmin_user }}
+    package_params: /SQLSYSADMINACCOUNTS:{{ sysadmin_user }}
   retries: 3
   delay: 3
   register: result
   until: result.rc == 0  
 
-- name: Add tmm\user to SQL Server sysadmin role
-  community.sql.mssql_user:
-    login: "tmm\\mark.xu"
-    state: present
-    roles:
-      - sysadmin
-    hostname: localhost
-    login_user: "administrator"  # Replace with an appropriate SQL admin user
-    login_password: "P@ssword123!"  # Replace with the admin's password
-
-  
 # Install SQL mamagement studio, etc.      
 
 - name: Install SQL Mgmt Tools
