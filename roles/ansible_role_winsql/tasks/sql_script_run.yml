@@ -17,9 +17,6 @@
   ansible.windows.win_shell: |
     $sql_file = [Console]::In.ReadToEnd()
     sqlcmd -S {{ computerName }} -E -Q $sql_file
-  become: yes
-  become_user: "tmm\\mark.xu"
-  become_method: runas
   args:
     stdin: "{{ lookup('template', 'templates/create_db_user.j2') | regex_replace('\n|\t', ' ') }}"
   register: sql_out
@@ -33,9 +30,6 @@
   ansible.windows.win_shell: |
     $sql_file = [Console]::In.ReadToEnd()
     sqlcmd -S {{ computerName }} -E -Q $sql_file
-  become: yes
-  become_user: "tmm\\mark.xu"
-  become_method: runas
   args:
     stdin: "{{ lookup('template', 'templates/create_db.j2') | regex_replace('\n|\t', ' ') }}"
   register: sql_out
@@ -47,9 +41,6 @@
   ansible.windows.win_shell: |
     $sql_file = [Console]::In.ReadToEnd()
     sqlcmd -S {{ computerName }} -E -Q $sql_file
-  become: yes
-  become_user: "tmm\\mark.xu"
-  become_method: runas
   args:
     stdin: "{{ lookup('template', 'templates/backup_db.j2') | regex_replace('\n|\t', ' ') }}"
   register: sql_out
@@ -63,9 +54,6 @@
   ansible.windows.win_shell: |
     $sql_file = [Console]::In.ReadToEnd()
     sqlcmd -S {{ computerName }} -E -Q $sql_file
-  become: yes
-  become_user: "tmm\\mark.xu"
-  become_method: runas
   args:
     stdin: "{{ lookup('template', 'templates/create_hadr_endpoint.j2') | regex_replace('\n|\t', ' ') }}"
   register: sql_out
@@ -78,9 +66,6 @@
   ansible.windows.win_shell: |
     $sql_file = [Console]::In.ReadToEnd()
     sqlcmd -S {{ computerName }} -E -Q $sql_file
-  become: yes
-  become_user: "tmm\\mark.xu"
-  become_method: runas
   args:
     stdin: "{{ lookup('template', 'templates/create_ag.j2') | regex_replace('\n|\t', ' ') }}"
   register: sql_out
@@ -95,9 +80,6 @@
   ansible.windows.win_shell: |
     $sql_file = [Console]::In.ReadToEnd()
     sqlcmd -S {{ computerName }} -E -Q $sql_file
-  become: yes
-  become_user: "tmm\\mark.xu"
-  become_method: runas
   args:
     stdin: "{{ lookup('template', 'templates/join_ag.j2') | regex_replace('\n|\t', ' ') }}"
   register: sql_out
