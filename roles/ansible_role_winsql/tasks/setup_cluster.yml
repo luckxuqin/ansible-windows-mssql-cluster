@@ -19,16 +19,25 @@
   ansible.windows.win_shell: |
     $my_ip_list = "{{ ip_addresses }}" | ConvertFrom-Json
     new-cluster -Name {{ 'sql_cluster' + '-' + deployment_id }} -Node $my_ip_list -AdministrativeAccessPoint Dns -StaticAddress {{ cluster_ip }}
+  become: yes
+  become_user: "tmm\\mark.xu"
+  become_method: runas
   when: not windows_cluster.stderr == ""
 
 - name: Enable AlwaysOn Avail Groups
   ansible.windows.win_shell: |
     foreach ($node in Get-ClusterNode) {Enable-SqlAlwaysOn -ServerInstance $node -Force}  
+  become: yes
+  become_user: "tmm\\mark.xu"
+  become_method: runas
   register: always_on_ag  
   
 
 - name: Restart the SQL Service
   ansible.windows.win_shell: | 
     Restart-Service MSSQLSERVER
+  become: yes
+  become_user: "tmm\\mark.xu"
+  become_method: runas
   retries: 3
   delay: 3  
