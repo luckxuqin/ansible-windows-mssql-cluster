@@ -13,31 +13,16 @@
   
 - name: Install Software Components
   ansible.builtin.include_tasks: install_software.yml
-  become: yes
-  become_user: "tmm\\mark.xu"
-  become_method: runas
 
 - name: Setup iSCSI 
   ansible.builtin.include_tasks: iscsi.yml 
-  become: yes
-  become_user: "tmm\\mark.xu"
-  become_method: runas
   
 - name: Setup Cluster
-  ansible.builtin.include_tasks: setup_cluster.yml
-  become: yes
-  become_user: "tmm\\mark.xu"
-  become_method: runas 
+  ansible.builtin.include_tasks: setup_cluster.yml 
    
 - name: Set SQL Params
-  ansible.builtin.include_tasks: sql_params.yml
-  become: yes
-  become_user: "tmm\\mark.xu"
-  become_method: runas   
+  ansible.builtin.include_tasks: sql_params.yml   
   
 - name: Run DB Script
   ansible.builtin.include_tasks: sql_script_run.yml 
-  when: mssql_service_info.services[0].state == 'started'
-  become: yes
-  become_user: "tmm\\mark.xu"
-  become_method: runas                
+  when: mssql_service_info.services[0].state == 'started'                

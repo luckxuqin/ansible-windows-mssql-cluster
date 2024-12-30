@@ -12,6 +12,9 @@
     state: present
     include_sub_features: true
     include_management_tools: true
+  become: yes
+  become_user: "tmm\\mark.xu"
+  become_method: runas
     
 # This shouldn't be needed, but sometimes failover clustering tools are
 # not installed by ansible.windows.win_feature     
@@ -19,7 +22,10 @@
 - name: Explicitly ensure failover clustering mgmt tools are installed
   ignore_errors: true
   ansible.windows.win_shell: |
-    Install-WindowsFeature -name FailOver-Clustering -IncludeManagementTools       
+    Install-WindowsFeature -name FailOver-Clustering -IncludeManagementTools
+  become: yes
+  become_user: "tmm\\mark.xu"
+  become_method: runas       
 
 
 # Install MPIO and set up for iSCSI volumes
