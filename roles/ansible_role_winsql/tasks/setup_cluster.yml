@@ -27,9 +27,6 @@
 - name: Enable AlwaysOn Avail Groups
   ansible.windows.win_shell: |
     foreach ($node in Get-ClusterNode) {Enable-SqlAlwaysOn -ServerInstance $node -Force}  
-  become: yes
-  become_user: "tmm\\mark.xu"
-  become_method: runas
   register: always_on_ag  
   
 
