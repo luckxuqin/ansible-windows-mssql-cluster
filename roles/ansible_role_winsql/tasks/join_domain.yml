@@ -1,7 +1,17 @@
+- name: Get hostname (computer name)
+  ansible.windows.win_shell: |
+    [System.Net.Dns]::GetHostName()
+  register: computerName_raw
+  
+- name: Trim computerName string
+  set_fact:
+    computerName: "{{ computerName_raw.stdout | trim }}"
+    cacheable: true   
+
 - name: join host to tmm.lab with automatic reboot
   microsoft.ad.membership:
     dns_domain_name: tmm.lab
-    hostname: '{{ inventory_hostname | lower }}'
+    hostname: '{{ computerName }}'
     domain_admin_user: mark.xu
     domain_admin_password: P@ssword123!
     domain_ou_path: "OU=VIDM,DC=tmm,DC=lab"
