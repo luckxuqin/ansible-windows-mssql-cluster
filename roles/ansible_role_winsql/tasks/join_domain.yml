@@ -7,13 +7,5 @@
     domain_ou_path: "OU=VIDM,DC=tmm,DC=lab"
     state: domain
 
-- name: Sleep for 30 seconds
-  sleep_module:
-    seconds: 30
-
 - name: Reboot the machine if joining the domain requires a restart
   ansible.windows.win_reboot:
-
-- name: Sleep for 60 seconds
-  sleep_module:
-    seconds: 60
