@@ -9,3 +9,4 @@
 
 - name: Reboot the machine if joining the domain requires a restart
   ansible.windows.win_reboot:
+    reboot_timeout: 300
